@@ -9,6 +9,7 @@ import { RenderSystem } from './ecs/systems/RenderSystem';
 import { PlayerControlSystem } from './ecs/systems/PlayerControlSystem';
 import { ClickToMoveSystem } from './ecs/systems/ClickToMoveSystem';
 import { UISystem } from './ecs/systems/UISystem';
+import { CameraFollowSystem } from './ecs/systems/CameraFollowSystem';
 import * as THREE from 'three';
 
 class Game {
@@ -16,6 +17,7 @@ class Game {
     private lastTime: number = 0;
     private renderSystem: RenderSystem;
     private clickToMoveSystem: ClickToMoveSystem;
+    private player!: Entity; // Using definite assignment assertion
 
     constructor() {
         this.world = new World();
@@ -24,12 +26,14 @@ class Game {
         this.renderSystem = new RenderSystem();
         const playerControlSystem = new PlayerControlSystem();
         const uiSystem = new UISystem();
+        const cameraFollowSystem = new CameraFollowSystem(this.world);
         
         // Create the click-to-move system with the scene from the render system
         this.clickToMoveSystem = new ClickToMoveSystem(this.world, this.renderSystem.getScene());
         
         this.world.addSystem(playerControlSystem);
         this.world.addSystem(this.clickToMoveSystem);
+        this.world.addSystem(cameraFollowSystem);
         this.world.addSystem(this.renderSystem);
         this.world.addSystem(uiSystem);
         
@@ -60,8 +64,8 @@ class Game {
         this.world.addEntity(floor);
         
         // Create player
-        const player = new Entity();
-        player.addComponent(new TransformComponent(new THREE.Vector3(0, 1, 0)));
+        this.player = new Entity();
+        this.player.addComponent(new TransformComponent(new THREE.Vector3(0, 1, 0)));
         
         // Create a more distinctive player model that shows direction
         const playerGroup = new THREE.Group();
@@ -81,35 +85,30 @@ class Game {
         playerGroup.add(arrow);
         
         // Add the group to the mesh component
-        player.addComponent(new MeshComponent(playerGroup));
+        this.player.addComponent(new MeshComponent(playerGroup));
         
-        player.addComponent(new PlayerComponent());
+        this.player.addComponent(new PlayerComponent());
         
         // Set initial rotation to face forward (negative Z axis)
-        const playerTransform = player.getComponent(TransformComponent);
+        const playerTransform = this.player.getComponent(TransformComponent);
         if (playerTransform) {
             playerTransform.rotation.y = Math.PI; // Rotate 180 degrees to face forward
         }
         
         // Add target position component for click-to-move functionality
-        player.addComponent(new TargetPositionComponent());
+        this.player.addComponent(new TargetPositionComponent());
         
-        this.world.addEntity(player);
+        this.world.addEntity(this.player);
         
-        // Create simple camera
+        // Create camera
         const camera = new Entity();
-        
-        // Posición simple para la cámara
-        camera.addComponent(new TransformComponent(new THREE.Vector3(0, 10, 15)));
-        
-        // Create simple camera component
+        camera.addComponent(new TransformComponent(new THREE.Vector3(0, 5, 10)));
         const cameraComponent = new CameraComponent(
             75, // fov
             window.innerWidth / window.innerHeight, // aspect
             0.1, // near
             1000 // far
         );
-        
         camera.addComponent(cameraComponent);
         
         this.world.addEntity(camera);
@@ -168,7 +167,7 @@ window.addEventListener('load', () => {
     instructions.innerHTML = `
         <h2>Controls:</h2>
         <p>Move: WASD or Arrow Keys</p>
-        <p>Rotate: Q/E</p>
+        <p>Camera Orbit: Hold Right Mouse Button</p>
         <p>Click-to-Move: Left Mouse Button on terrain</p>
         <p>Settings: Click the ⚙️ button in top-right corner</p>
     `;

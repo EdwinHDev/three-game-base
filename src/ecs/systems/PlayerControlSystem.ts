@@ -63,66 +63,16 @@ export class PlayerControlSystem extends System {
                     moveDirection.z += 1; // Backward is +Z
                 }
                 
-                // Left/right (X axis)
-                const movingLeft = this.keyStates['KeyA'] || this.keyStates['ArrowLeft'];
-                const movingRight = this.keyStates['KeyD'] || this.keyStates['ArrowRight'];
+                // Left/right rotation
+                const rotatingLeft = this.keyStates['KeyA'] || this.keyStates['ArrowLeft'];
+                const rotatingRight = this.keyStates['KeyD'] || this.keyStates['ArrowRight'];
                 
-                if (movingLeft) {
-                    moveDirection.x -= 1; // Left is -X
+                // Apply rotation based on A/D keys
+                if (rotatingLeft) {
+                    transform.rotation.y += player.turnSpeed * deltaTime;
                 }
-                if (movingRight) {
-                    moveDirection.x += 1; // Right is +X
-                }
-                
-                // Determinar la dirección de rotación basada en las teclas presionadas
-                let targetRotationY = transform.rotation.y; // Mantener rotación actual por defecto
-                let shouldRotate = false;
-                
-                // Priorizar rotación según las teclas presionadas
-                if ((movingLeft || movingRight) && !(movingLeft && movingRight)) {
-                    // Si solo se presiona izquierda o derecha (no ambas)
-                    targetRotationY = movingLeft ? Math.PI / 2 : -Math.PI / 2;
-                    shouldRotate = true;
-                } else if ((movingForward || movingBackward) && !(movingForward && movingBackward)) {
-                    // Si solo se presiona adelante o atrás (no ambas)
-                    targetRotationY = movingForward ? 0 : Math.PI;
-                    shouldRotate = true;
-                } else if (movingForward && movingLeft) {
-                    // Diagonal adelante-izquierda
-                    targetRotationY = Math.PI / 4;
-                    shouldRotate = true;
-                } else if (movingForward && movingRight) {
-                    // Diagonal adelante-derecha
-                    targetRotationY = -Math.PI / 4;
-                    shouldRotate = true;
-                } else if (movingBackward && movingLeft) {
-                    // Diagonal atrás-izquierda
-                    targetRotationY = 3 * Math.PI / 4;
-                    shouldRotate = true;
-                } else if (movingBackward && movingRight) {
-                    // Diagonal atrás-derecha
-                    targetRotationY = -3 * Math.PI / 4;
-                    shouldRotate = true;
-                }
-                
-                // Aplicar rotación hacia la dirección de movimiento
-                if (shouldRotate) {
-                    // Asegurarse de que la rotación esté dentro del rango correcto
-                    const rotationSpeed = player.turnSpeed * deltaTime;
-                    
-                    // Calcular el ángulo más corto para girar
-                    let angleDiff = targetRotationY - transform.rotation.y;
-                    
-                    // Normalizar la diferencia de ángulo a [-PI, PI]
-                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-                    
-                    // Aplicar la rotación (con límite de velocidad)
-                    const rotationStep = Math.min(rotationSpeed, Math.abs(angleDiff));
-                    transform.rotation.y += rotationStep * Math.sign(angleDiff);
-                    
-                    // Simplificar el vector de movimiento para que se mueva hacia adelante en su nueva dirección
-                    moveDirection.set(0, 0, -1);
+                if (rotatingRight) {
+                    transform.rotation.y -= player.turnSpeed * deltaTime;
                 }
                 
                 // Actualizar estado de movimiento
@@ -132,6 +82,23 @@ export class PlayerControlSystem extends System {
                 // Si estamos usando alguna tecla de movimiento, marcamos como control por teclado
                 if (isMoving) {
                     player.isUsingKeyboardControl = true;
+                    
+                    // Normalize for consistent speed in all directions
+                    moveDirection.normalize();
+                    
+                    // Apply movement relative to the player's facing direction
+                    const speed = player.moveSpeed * deltaTime;
+                    const movement = moveDirection.multiplyScalar(speed);
+                    
+                    // Create a quaternion from current rotation
+                    const quaternion = new THREE.Quaternion();
+                    quaternion.setFromEuler(transform.rotation);
+                    
+                    // Apply rotation to movement vector (to move in facing direction)
+                    movement.applyQuaternion(quaternion);
+                    
+                    // Update position
+                    transform.position.add(movement);
                 } else {
                     // Si no estamos moviendo con teclado, verificamos si hay movimiento click-to-move
                     const targetPos = entity.getComponent(TargetPositionComponent);
@@ -142,33 +109,6 @@ export class PlayerControlSystem extends System {
                     } else {
                         player.isMoving = false;
                     }
-                }
-                
-                // Normalize for consistent speed in all directions
-                if (isMoving) {
-                    moveDirection.normalize();
-                }
-                
-                // Apply movement relative to the player's facing direction
-                const speed = player.moveSpeed * deltaTime;
-                const movement = moveDirection.multiplyScalar(speed);
-                
-                // Create a quaternion from current rotation
-                const quaternion = new THREE.Quaternion();
-                quaternion.setFromEuler(transform.rotation);
-                
-                // Apply rotation to movement vector (to move in facing direction)
-                movement.applyQuaternion(quaternion);
-                
-                // Update position
-                transform.position.add(movement);
-                
-                // Rotation (manual turning with Q/E keys)
-                if (this.keyStates['KeyQ']) {
-                    transform.rotation.y += player.turnSpeed * deltaTime; // Rotate left
-                }
-                if (this.keyStates['KeyE']) {
-                    transform.rotation.y -= player.turnSpeed * deltaTime; // Rotate right
                 }
             }
         }
