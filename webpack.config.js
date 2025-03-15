@@ -1,4 +1,5 @@
 const path = require('path');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: './src/index.ts',
@@ -19,9 +20,17 @@ module.exports = {
     filename: 'bundle.js',
     path: path.resolve(__dirname, 'dist'),
   },
+  plugins: [
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: 'index.html', to: '' },
+        { from: 'models', to: 'models' }
+      ],
+    }),
+  ],
   devServer: {
     static: {
-      directory: path.join(__dirname, '.'),
+      directory: path.join(__dirname, '/'),
     },
     compress: true,
     port: 9000,

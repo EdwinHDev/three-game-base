@@ -5,11 +5,13 @@ import { MeshComponent } from './ecs/components/MeshComponent';
 import { PlayerComponent } from './ecs/components/PlayerComponent';
 import { CameraComponent } from './ecs/components/CameraComponent';
 import { TargetPositionComponent } from './ecs/components/TargetPositionComponent';
+import { ModelComponent } from './ecs/components/ModelComponent';
 import { RenderSystem } from './ecs/systems/RenderSystem';
 import { PlayerControlSystem } from './ecs/systems/PlayerControlSystem';
 import { ClickToMoveSystem } from './ecs/systems/ClickToMoveSystem';
 import { UISystem } from './ecs/systems/UISystem';
 import { CameraFollowSystem } from './ecs/systems/CameraFollowSystem';
+import { ModelLoader } from './utils/ModelLoader';
 import * as THREE from 'three';
 
 class Game {
@@ -17,19 +19,17 @@ class Game {
     private lastTime: number = 0;
     private renderSystem: RenderSystem;
     private clickToMoveSystem: ClickToMoveSystem;
-    private player!: Entity; // Using definite assignment assertion
+    private player!: Entity;
 
     constructor() {
         this.world = new World();
         
         // Add all systems
         this.renderSystem = new RenderSystem();
-        const playerControlSystem = new PlayerControlSystem();
+        this.clickToMoveSystem = new ClickToMoveSystem(this.world, this.renderSystem.getScene());
+        const playerControlSystem = new PlayerControlSystem(this.clickToMoveSystem);
         const uiSystem = new UISystem();
         const cameraFollowSystem = new CameraFollowSystem(this.world);
-        
-        // Create the click-to-move system with the scene from the render system
-        this.clickToMoveSystem = new ClickToMoveSystem(this.world, this.renderSystem.getScene());
         
         this.world.addSystem(playerControlSystem);
         this.world.addSystem(this.clickToMoveSystem);
@@ -44,10 +44,10 @@ class Game {
         this.gameLoop(0);
     }
     
-    private createEntities(): void {
+    private async createEntities(): Promise<void> {
         // Create floor
         const floor = new Entity();
-        floor.addComponent(new TransformComponent(new THREE.Vector3(0, -0.5, 0)));
+        floor.addComponent(new TransformComponent(new THREE.Vector3(0, 0, 0)));
         floor.addComponent(new MeshComponent(
             new THREE.Mesh(
                 new THREE.PlaneGeometry(50, 50),
@@ -65,40 +65,45 @@ class Game {
         
         // Create player
         this.player = new Entity();
-        this.player.addComponent(new TransformComponent(new THREE.Vector3(0, 1, 0)));
+        this.player.addComponent(new TransformComponent(new THREE.Vector3(0, 0.01, 0)));
         
-        // Create a more distinctive player model that shows direction
-        const playerGroup = new THREE.Group();
-        
-        // Main body (slightly elongated)
-        const bodyGeometry = new THREE.BoxGeometry(0.8, 2, 1.2);
-        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x2288ff });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        playerGroup.add(body);
-        
-        // Front indicator (arrow head)
-        const arrowGeometry = new THREE.ConeGeometry(0.4, 0.8, 4);
-        const arrowMaterial = new THREE.MeshStandardMaterial({ color: 0x44aaff });
-        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
-        arrow.position.z = -0.8; // Move forward
-        arrow.rotation.x = Math.PI / 2; // Point forward
-        playerGroup.add(arrow);
-        
-        // Add the group to the mesh component
-        this.player.addComponent(new MeshComponent(playerGroup));
-        
-        this.player.addComponent(new PlayerComponent());
-        
-        // Set initial rotation to face forward (negative Z axis)
-        const playerTransform = this.player.getComponent(TransformComponent);
-        if (playerTransform) {
-            playerTransform.rotation.y = Math.PI; // Rotate 180 degrees to face forward
+        try {
+            // Cargar el modelo del personaje
+            const playerModel = await ModelLoader.loadModel('/models/character.fbx');
+            
+            // Cargar las animaciones
+            const animations = await ModelLoader.loadAnimations([
+                '/models/idle.fbx',
+                '/models/walk.fbx',
+                '/models/walk-back.fbx',
+                '/models/dance.fbx'
+            ]);
+            
+            // Añadir las animaciones al modelo
+            playerModel.animations = animations;
+            
+            // Crear el componente del modelo
+            const modelComponent = new ModelComponent(playerModel);
+            this.player.addComponent(modelComponent);
+            
+            // Ajustar la escala y posición del modelo
+            const playerTransform = this.player.getComponent(TransformComponent);
+            if (playerTransform) {
+                // Los modelos de Mixamo suelen necesitar esta escala
+                playerTransform.scale.setScalar(0.01);
+                // Rotar para que mire en la dirección correcta
+                playerTransform.rotation.y = Math.PI;
+            }
+            
+            this.player.addComponent(new PlayerComponent());
+            this.player.addComponent(new TargetPositionComponent());
+            
+            this.world.addEntity(this.player);
+        } catch (error) {
+            console.error('Error loading player model:', error);
+            // Fallback to cube if model loading fails
+            this.createFallbackPlayer();
         }
-        
-        // Add target position component for click-to-move functionality
-        this.player.addComponent(new TargetPositionComponent());
-        
-        this.world.addEntity(this.player);
         
         // Create camera
         const camera = new Entity();
@@ -136,21 +141,43 @@ class Game {
             this.world.addEntity(obstacle);
         }
     }
+
+    private createFallbackPlayer(): void {
+        // Create a more distinctive player model that shows direction
+        const playerGroup = new THREE.Group();
+        
+        // Main body (slightly elongated)
+        const bodyGeometry = new THREE.BoxGeometry(0.8, 2, 1.2);
+        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x2288ff });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        playerGroup.add(body);
+        
+        // Front indicator (arrow head)
+        const arrowGeometry = new THREE.ConeGeometry(0.4, 0.8, 4);
+        const arrowMaterial = new THREE.MeshStandardMaterial({ color: 0x44aaff });
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        arrow.position.z = -0.8; // Move forward
+        arrow.rotation.x = Math.PI / 2; // Point forward
+        playerGroup.add(arrow);
+        
+        this.player.addComponent(new MeshComponent(playerGroup));
+        this.player.addComponent(new PlayerComponent());
+        this.player.addComponent(new TargetPositionComponent());
+        
+        this.world.addEntity(this.player);
+    }
     
-    private gameLoop(timestamp: number): void {
-        // Calculate delta time in seconds
-        const deltaTime = (timestamp - this.lastTime) / 1000;
-        this.lastTime = timestamp;
+    private gameLoop(time: number): void {
+        requestAnimationFrame((t) => this.gameLoop(t));
         
-        // Update world
+        const deltaTime = (time - this.lastTime) / 1000;
+        this.lastTime = time;
+        
         this.world.update(deltaTime);
-        
-        // Request next frame
-        requestAnimationFrame(this.gameLoop.bind(this));
     }
 }
 
-// Start the game when the page is loaded
+// Start the game when the window loads
 window.addEventListener('load', () => {
     new Game();
     

@@ -1,23 +1,30 @@
 import { System } from '../core/System';
 import { UserSettings } from '../../config/UserSettings';
 import { Entity } from '../core/Entity';
+import { PlayerComponent } from '../components/PlayerComponent';
+import { ModelComponent } from '../components/ModelComponent';
 
 export class UISystem extends System {
     private userSettings: UserSettings;
     private menuButton!: HTMLButtonElement;
     private settingsModal!: HTMLDivElement;
     private modalVisible: boolean = false;
+    private actionsButton!: HTMLButtonElement;
+    private actionsMenu!: HTMLDivElement;
+    private isMenuOpen: boolean = false;
+    private currentAnimation: string | null = null;
     
     constructor() {
         super();
         
         this.userSettings = UserSettings.getInstance();
         this.createUI();
+        this.createActionsUI();
     }
     
     protected isEntityCompatible(entity: Entity): boolean {
-        // UI System doesn't need to process entities
-        return false;
+        return entity.hasComponent(PlayerComponent) && 
+               entity.hasComponent(ModelComponent);
     }
     
     private createUI(): void {
@@ -159,7 +166,120 @@ export class UISystem extends System {
         this.toggleModal();
     }
     
-    public update(_deltaTime: number): void {
-        // No update needed for UI
+    private createActionsUI(): void {
+        // Create actions button
+        this.actionsButton = document.createElement('button');
+        this.actionsButton.innerHTML = '⚔️';
+        this.actionsButton.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            background-color: #4a5568;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        `;
+
+        // Create actions menu
+        this.actionsMenu = document.createElement('div');
+        this.actionsMenu.style.cssText = `
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+            z-index: 1000;
+        `;
+
+        // Create dance button
+        const danceButton = document.createElement('button');
+        danceButton.innerHTML = '💃 Bailar';
+        danceButton.style.cssText = `
+            display: block;
+            width: 100%;
+            padding: 8px 16px;
+            border: none;
+            background: none;
+            text-align: left;
+            cursor: pointer;
+            font-size: 14px;
+            color: #4a5568;
+            border-radius: 4px;
+            &:hover {
+                background-color: #f7fafc;
+            }
+        `;
+
+        danceButton.addEventListener('click', () => {
+            this.toggleDanceAnimation();
+            this.closeMenu();
+        });
+
+        this.actionsMenu.appendChild(danceButton);
+        document.body.appendChild(this.actionsButton);
+        document.body.appendChild(this.actionsMenu);
+
+        // Add click listeners
+        this.actionsButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleMenu();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (this.isMenuOpen && !this.actionsMenu.contains(e.target as Node)) {
+                this.closeMenu();
+            }
+        });
+    }
+
+    private toggleMenu(): void {
+        this.isMenuOpen = !this.isMenuOpen;
+        this.actionsMenu.style.display = this.isMenuOpen ? 'block' : 'none';
+    }
+
+    private closeMenu(): void {
+        this.isMenuOpen = false;
+        this.actionsMenu.style.display = 'none';
+    }
+
+    private toggleDanceAnimation(): void {
+        const player = this.getPlayerEntity();
+        if (!player) return;
+
+        const modelComponent = player.getComponent(ModelComponent);
+        if (!modelComponent) return;
+
+        if (this.currentAnimation === 'dance') {
+            modelComponent.playAnimation('idle');
+            this.currentAnimation = null;
+        } else {
+            modelComponent.playAnimation('dance');
+            this.currentAnimation = 'dance';
+        }
+    }
+
+    private getPlayerEntity(): Entity | null {
+        for (const entity of this.entities) {
+            if (entity.hasComponent(PlayerComponent)) {
+                return entity;
+            }
+        }
+        return null;
+    }
+    
+    public update(deltaTime: number): void {
+        // Actualizar el estado del UI si es necesario
     }
 }
